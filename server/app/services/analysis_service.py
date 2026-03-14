@@ -16,6 +16,7 @@ from app.models.analysis_models import (
     LuminanceTransitionMetric, MotionMetric, PatternMetric,
     RedFlashMetric, SceneCutMetric,
 )
+from app.services.ai_service import AIService
 from app.services.report_service import ReportService
 from app.utils.cleanup import cleanup_video_files
 
@@ -36,10 +37,12 @@ class AnalysisService:
         self._config = config
         self._extractor = FrameExtractor()
         self._report = ReportService()
+        self._ai_service = AIService()
 
     async def analyze_video(
         self, video_id: str, file_path: str,
         progress_cb: ProgressCallback | None = None,
+        api_key: str | None = None,
     ) -> AnalysisResult:
         """Run the full analysis pipeline on an uploaded video."""
         logger.info("Starting analysis for video_id=%s", video_id)
@@ -92,6 +95,22 @@ class AnalysisService:
             pattern_metrics=metrics["pattern"],
             danger_zones=zones,
         )
+        if api_key:
+            try:
+                report("Generating AI report", 0.95)
+                result.ai_report = await self._ai_service.generate_report(
+                    result, api_key,
+                )
+                result.graph_explanations = (
+                    await self._ai_service.generate_graph_explanations(
+                        result, api_key,
+                    )
+                )
+            except Exception:
+                logger.warning(
+                    "AI report generation failed, continuing without it"
+                )
+
         AnalysisService._results[video_id] = result
         cleanup_video_files(video_id, self._config.temp_dir, keep_video=True)
         report("Complete", 1.0, total, total)

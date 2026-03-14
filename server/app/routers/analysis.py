@@ -7,7 +7,7 @@ import logging
 import os
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, UploadFile
 from fastapi import status as http_status
 
 from app.config import settings
@@ -45,7 +45,9 @@ async def _save_upload(file: UploadFile, video_id: str) -> str:
     return file_path
 
 
-async def _run_analysis(video_id: str, file_path: str) -> None:
+async def _run_analysis(
+    video_id: str, file_path: str, api_key: str | None = None,
+) -> None:
     """Background task that runs the analysis pipeline."""
     try:
         def sync_progress(p: AnalysisProgress) -> None:
@@ -53,7 +55,9 @@ async def _run_analysis(video_id: str, file_path: str) -> None:
                 ws_manager.send_progress(video_id, p.model_dump())
             )
 
-        await _analysis_service.analyze_video(video_id, file_path, sync_progress)
+        await _analysis_service.analyze_video(
+            video_id, file_path, sync_progress, api_key,
+        )
     except AnalysisError:
         logger.exception("Analysis failed for video_id=%s", video_id)
 
@@ -66,6 +70,7 @@ async def _run_analysis(video_id: str, file_path: str) -> None:
 async def upload_video(
     file: UploadFile,
     background_tasks: BackgroundTasks,
+    api_key: str | None = Form(default=None),
 ) -> ApiResponse[dict]:
     """Accept a video upload, save it, and start analysis in the background."""
     _validate_upload(file)
@@ -74,7 +79,7 @@ async def upload_video(
     file_path = await _save_upload(file, video_id)
     logger.info("Saved upload video_id=%s path=%s", video_id, file_path)
 
-    background_tasks.add_task(_run_analysis, video_id, file_path)
+    background_tasks.add_task(_run_analysis, video_id, file_path, api_key)
 
     return ApiResponse(
         success=True,

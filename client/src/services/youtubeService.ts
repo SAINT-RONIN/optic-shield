@@ -16,11 +16,15 @@ export interface YouTubeDownloadResult {
   metadata: YouTubeVideoInfo
 }
 
-export async function submitUrl(url: string): Promise<ApiResponse<YouTubeDownloadResult>> {
+export async function submitUrl(url: string, apiKey?: string): Promise<ApiResponse<YouTubeDownloadResult>> {
+  const body: Record<string, string> = { url }
+  if (apiKey) {
+    body.api_key = apiKey
+  }
   const response = await fetch(`${API_BASE}/youtube`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url })
+    body: JSON.stringify(body)
   })
   const json = await response.json()
   return transformKeys<ApiResponse<YouTubeDownloadResult>>(json)

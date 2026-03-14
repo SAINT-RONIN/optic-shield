@@ -7,6 +7,9 @@ class YouTubeRequest(BaseModel):
     """Request payload for downloading and analysing a YouTube video."""
 
     url: str = Field(description="Full YouTube video URL to download")
+    api_key: str | None = Field(
+        default=None, description="API key for AI report generation"
+    )
 
 
 class YouTubeVideoInfo(BaseModel):

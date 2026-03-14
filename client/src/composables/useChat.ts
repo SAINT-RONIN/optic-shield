@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useChatStore } from '@/stores/chatStore'
+import { useAnalysisStore } from '@/stores/analysisStore'
 import { useApiKey } from './useApiKey'
 import { sendMessage as sendChatMessage } from '@/services/chatService'
 import type { ChatMessage, ChatRequest } from '@/types/chat'
@@ -27,11 +28,13 @@ export function useChat() {
     store.setLoading(true)
     store.setError(null)
 
+    const analysisStore = useAnalysisStore()
+
     const request: ChatRequest = {
       message: content,
       apiKey: apiKey.value,
       conversationHistory: messages.value.slice(0, -1),
-      analysisContext: null
+      analysisContext: analysisStore.currentAnalysis
     }
 
     try {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import AppSidebar from '@/components/organisms/AppSidebar.vue'
 import AiOrb from '@/components/organisms/AiOrb.vue'
 import SuggestionChip from '@/components/molecules/SuggestionChip.vue'
@@ -16,10 +16,21 @@ import VideoPlayer from '@/components/organisms/VideoPlayer.vue'
 import { useChat } from '@/composables/useChat'
 import { useAnalysis } from '@/composables/useAnalysis'
 import { useGraphSync } from '@/composables/useGraphSync'
+import { useApiKey } from '@/composables/useApiKey'
 
 const { messages, isLoading, showApiKeyModal, sendMessage } = useChat()
 const { currentAnalysis, isAnalyzing, youtubeInfo, startAnalysis, startYoutubeAnalysis } = useAnalysis()
 const { isInDangerZone } = useGraphSync()
+const { hasKey } = useApiKey()
+
+watch(currentAnalysis, (analysis) => {
+  if (analysis && hasKey.value) {
+    const dangerCount = analysis.dangerZones.length
+    const score = analysis.safetyScore.toFixed(1)
+    const summaryPrompt = `Summarize the analysis results for "${analysis.videoMetadata.filename}". Safety score: ${score}/100, verdict: "${analysis.verdict}", ${dangerCount} danger zone(s) detected.`
+    sendMessage(summaryPrompt)
+  }
+})
 
 const hasMessages = computed(() => messages.value.length > 0)
 const panelOpen = computed(() => currentAnalysis.value !== null)

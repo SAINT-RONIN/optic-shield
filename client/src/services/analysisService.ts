@@ -3,9 +3,12 @@ import type { ApiResponse } from '@/types/api'
 import type { AnalysisResult } from '@/types/analysis'
 import { transformKeys } from '@/utils/caseTransform'
 
-export async function uploadVideo(file: File): Promise<ApiResponse<{ videoId: string; filename: string }>> {
+export async function uploadVideo(file: File, apiKey?: string): Promise<ApiResponse<{ videoId: string; filename: string }>> {
   const formData = new FormData()
   formData.append('file', file)
+  if (apiKey) {
+    formData.append('api_key', apiKey)
+  }
   const response = await fetch(`${API_BASE}/analyze`, { method: 'POST', body: formData })
   const json = await response.json()
   return transformKeys<ApiResponse<{ videoId: string; filename: string }>>(json)

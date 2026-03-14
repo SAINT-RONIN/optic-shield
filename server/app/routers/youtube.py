@@ -22,7 +22,9 @@ _youtube_service = YouTubeService(config=settings)
 _analysis_service = AnalysisService(config=settings)
 
 
-async def _run_youtube_analysis(video_id: str, file_path: str) -> None:
+async def _run_youtube_analysis(
+    video_id: str, file_path: str, api_key: str | None = None,
+) -> None:
     """Background task: run analysis on downloaded YouTube video."""
     import asyncio
 
@@ -35,7 +37,7 @@ async def _run_youtube_analysis(video_id: str, file_path: str) -> None:
             )
 
         await _analysis_service.analyze_video(
-            video_id, file_path, sync_progress
+            video_id, file_path, sync_progress, api_key,
         )
     except Exception:
         logger.exception(
@@ -67,7 +69,8 @@ async def download_youtube_video(
 
     logger.info("YouTube downloaded: video_id=%s", result.video_id)
     background_tasks.add_task(
-        _run_youtube_analysis, result.video_id, result.file_path
+        _run_youtube_analysis, result.video_id, result.file_path,
+        body.api_key,
     )
 
     return ApiResponse(success=True, data=result)

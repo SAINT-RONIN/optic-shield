@@ -7,10 +7,12 @@ import type { YouTubeVideoInfo } from '@/services/youtubeService'
 import { socketService } from '@/services/socketService'
 import { transformKeys } from '@/utils/caseTransform'
 import type { AnalysisProgress } from '@/types/analysis'
+import { useApiKey } from './useApiKey'
 
 export function useAnalysis() {
   const store = useAnalysisStore()
   const { currentAnalysis, progress, isAnalyzing, error } = storeToRefs(store)
+  const { apiKey } = useApiKey()
   const youtubeInfo = ref<YouTubeVideoInfo | null>(null)
 
   async function startAnalysis(file: File): Promise<void> {
@@ -18,7 +20,7 @@ export function useAnalysis() {
     store.isAnalyzing = true
 
     try {
-      const uploadResponse = await uploadVideo(file)
+      const uploadResponse = await uploadVideo(file, apiKey.value || undefined)
       if (!uploadResponse.success || !uploadResponse.data) {
         store.setError(uploadResponse.error ?? 'Upload failed')
         return
@@ -64,7 +66,7 @@ export function useAnalysis() {
     store.isAnalyzing = true
 
     try {
-      const response = await submitUrl(url)
+      const response = await submitUrl(url, apiKey.value || undefined)
       if (!response.success || !response.data) {
         store.setError(response.error ?? 'YouTube download failed')
         return
