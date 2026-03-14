@@ -1,5 +1,6 @@
 import { API_BASE } from '@/utils/constants'
 import type { ApiResponse } from '@/types/api'
+import { transformKeys } from '@/utils/caseTransform'
 
 export interface YouTubeVideoInfo {
   title: string
@@ -9,11 +10,18 @@ export interface YouTubeVideoInfo {
   channel: string | null
 }
 
-export async function submitUrl(url: string): Promise<ApiResponse<{ videoId: string; metadata: YouTubeVideoInfo }>> {
+export interface YouTubeDownloadResult {
+  videoId: string
+  filePath: string
+  metadata: YouTubeVideoInfo
+}
+
+export async function submitUrl(url: string): Promise<ApiResponse<YouTubeDownloadResult>> {
   const response = await fetch(`${API_BASE}/youtube`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url })
   })
-  return response.json() as Promise<ApiResponse<{ videoId: string; metadata: YouTubeVideoInfo }>>
+  const json = await response.json()
+  return transformKeys<ApiResponse<YouTubeDownloadResult>>(json)
 }

@@ -1,6 +1,9 @@
+import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAnalysisStore } from '@/stores/analysisStore'
 import { uploadVideo, getAnalysis } from '@/services/analysisService'
+import { submitUrl } from '@/services/youtubeService'
+import type { YouTubeVideoInfo } from '@/services/youtubeService'
 import { socketService } from '@/services/socketService'
 import { transformKeys } from '@/utils/caseTransform'
 import type { AnalysisProgress } from '@/types/analysis'
@@ -8,6 +11,7 @@ import type { AnalysisProgress } from '@/types/analysis'
 export function useAnalysis() {
   const store = useAnalysisStore()
   const { currentAnalysis, progress, isAnalyzing, error } = storeToRefs(store)
+  const youtubeInfo = ref<YouTubeVideoInfo | null>(null)
 
   async function startAnalysis(file: File): Promise<void> {
     store.clearAnalysis()
@@ -54,8 +58,28 @@ export function useAnalysis() {
     }
   }
 
+  async function startYoutubeAnalysis(url: string): Promise<void> {
+    store.clearAnalysis()
+    youtubeInfo.value = null
+    store.isAnalyzing = true
+
+    try {
+      const response = await submitUrl(url)
+      if (!response.success || !response.data) {
+        store.setError(response.error ?? 'YouTube download failed')
+        return
+      }
+
+      youtubeInfo.value = response.data.metadata
+      const videoId = response.data.videoId
+      connectProgress(videoId)
+    } catch {
+      store.setError('Failed to start YouTube analysis')
+    }
+  }
+
   return {
-    currentAnalysis, progress, isAnalyzing, error,
-    startAnalysis, clearAnalysis: store.clearAnalysis,
+    currentAnalysis, progress, isAnalyzing, error, youtubeInfo,
+    startAnalysis, startYoutubeAnalysis, clearAnalysis: store.clearAnalysis,
   }
 }

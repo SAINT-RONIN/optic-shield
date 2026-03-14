@@ -4,6 +4,8 @@ import AppSidebar from '@/components/organisms/AppSidebar.vue'
 import AiOrb from '@/components/organisms/AiOrb.vue'
 import SuggestionChip from '@/components/molecules/SuggestionChip.vue'
 import UploadArea from '@/components/organisms/UploadArea.vue'
+import YoutubeInput from '@/components/organisms/YoutubeInput.vue'
+import YoutubeFileCard from '@/components/molecules/YoutubeFileCard.vue'
 import ChatContainer from '@/components/organisms/ChatContainer.vue'
 import ApiKeyModal from '@/components/organisms/ApiKeyModal.vue'
 import SafetyScoreCard from '@/components/organisms/SafetyScoreCard.vue'
@@ -16,7 +18,7 @@ import { useAnalysis } from '@/composables/useAnalysis'
 import { useGraphSync } from '@/composables/useGraphSync'
 
 const { messages, isLoading, showApiKeyModal, sendMessage } = useChat()
-const { currentAnalysis, isAnalyzing, startAnalysis } = useAnalysis()
+const { currentAnalysis, isAnalyzing, youtubeInfo, startAnalysis, startYoutubeAnalysis } = useAnalysis()
 const { isInDangerZone } = useGraphSync()
 
 const hasMessages = computed(() => messages.value.length > 0)
@@ -78,8 +80,19 @@ const explanations = computed(() => currentAnalysis.value?.graphExplanations ?? 
             <SuggestionChip v-for="s in suggestions" :key="s" :label="s" @click="sendMessage(s)" />
           </div>
           <UploadArea @file-selected="startAnalysis" />
+          <div class="text-[11px] text-text-tertiary">or</div>
+          <YoutubeInput @submit="startYoutubeAnalysis" />
         </div>
       </Transition>
+
+      <div v-if="youtubeInfo" class="px-6 pt-4">
+        <YoutubeFileCard
+          :title="youtubeInfo.title"
+          :channel="youtubeInfo.channel"
+          :duration="youtubeInfo.duration"
+          :thumbnail="youtubeInfo.thumbnail"
+        />
+      </div>
 
       <div :class="['flex flex-col w-full', hasMessages || isAnalyzing ? 'flex-1 overflow-hidden' : 'h-[200px] shrink-0']">
         <ChatContainer />
