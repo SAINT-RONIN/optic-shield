@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AppSidebar from '@/components/organisms/AppSidebar.vue'
 import AiOrb from '@/components/organisms/AiOrb.vue'
 import SuggestionChip from '@/components/molecules/SuggestionChip.vue'
@@ -17,53 +17,38 @@ import { useChat } from '@/composables/useChat'
 import { useAnalysis } from '@/composables/useAnalysis'
 import { useGraphSync } from '@/composables/useGraphSync'
 import { useApiKey } from '@/composables/useApiKey'
+import { useGraphData } from '@/viewmodels/graphDataMapper'
 
 const { messages, isLoading, showApiKeyModal, sendMessage } = useChat()
 const { currentAnalysis, isAnalyzing, youtubeInfo, startAnalysis, startYoutubeAnalysis } = useAnalysis()
 const { isInDangerZone } = useGraphSync()
 const { hasKey } = useApiKey()
+const { flashData, redFlashData, lumData, motionData, sceneCutData, colorCycleData, explanations } = useGraphData(currentAnalysis)
+
+const orbCompleting = ref(false)
 
 watch(currentAnalysis, (analysis) => {
-  if (analysis && hasKey.value) {
-    const dangerCount = analysis.dangerZones.length
-    const score = analysis.safetyScore.toFixed(1)
-    const summaryPrompt = `Summarize the analysis results for "${analysis.videoMetadata.filename}". Safety score: ${score}/100, verdict: "${analysis.verdict}", ${dangerCount} danger zone(s) detected.`
-    sendMessage(summaryPrompt)
+  if (analysis) {
+    orbCompleting.value = true
+    setTimeout(() => { orbCompleting.value = false }, 500)
+    if (hasKey.value) {
+      const score = analysis.safetyScore.toFixed(1)
+      sendMessage(`Summarize the analysis for "${analysis.videoMetadata.filename}". Score: ${score}/100, verdict: "${analysis.verdict}", ${analysis.dangerZones.length} danger zone(s).`)
+    }
   }
 })
 
 const hasMessages = computed(() => messages.value.length > 0)
 const panelOpen = computed(() => currentAnalysis.value !== null)
 const orbState = computed(() => {
+  if (orbCompleting.value) return 'complete' as const
   if (isInDangerZone.value) return 'alert' as const
   if (isAnalyzing.value) return 'analyzing' as const
   if (isLoading.value) return 'thinking' as const
   return 'idle' as const
 })
 
-const suggestions = [
-  'What makes a video unsafe?',
-  'Explain WCAG guidelines',
-  'What is photosensitive epilepsy?'
-]
-
-interface DataPoint { timestamp: number; value: number }
-
-function toDataPoints<T extends { timestamp: number }>(
-  metrics: T[] | undefined,
-  valueGetter: (m: T) => number
-): DataPoint[] | undefined {
-  return metrics?.map(m => ({ timestamp: m.timestamp, value: valueGetter(m) }))
-}
-
-const flashData = computed(() => toDataPoints(currentAnalysis.value?.flashMetrics, m => m.flashCountPerSecond))
-const redFlashData = computed(() => toDataPoints(currentAnalysis.value?.redFlashMetrics, m => m.redFlashIntensity))
-const lumData = computed(() => toDataPoints(currentAnalysis.value?.luminanceMetrics, m => m.avgLuminance))
-const motionData = computed(() => toDataPoints(currentAnalysis.value?.motionMetrics, m => m.motionIntensity))
-const sceneCutData = computed(() => toDataPoints(currentAnalysis.value?.sceneCutMetrics, m => m.cutConfidence))
-const colorCycleData = computed(() => toDataPoints(currentAnalysis.value?.colorCycleMetrics, m => m.hueShiftSpeed))
-
-const explanations = computed(() => currentAnalysis.value?.graphExplanations ?? {})
+const suggestions = ['What makes a video unsafe?', 'Explain WCAG guidelines', 'What is photosensitive epilepsy?']
 </script>
 
 <template>
