@@ -31,12 +31,23 @@ const suggestions = [
   'What is photosensitive epilepsy?'
 ]
 
-const flashData = computed(() =>
-  currentAnalysis.value?.flashMetrics.map(m => ({ timestamp: m.timestamp, value: m.flashCountPerSecond }))
-)
-const lumData = computed(() =>
-  currentAnalysis.value?.luminanceMetrics.map(m => ({ timestamp: m.timestamp, value: m.avgLuminance }))
-)
+interface DataPoint { timestamp: number; value: number }
+
+function toDataPoints<T extends { timestamp: number }>(
+  metrics: T[] | undefined,
+  valueGetter: (m: T) => number
+): DataPoint[] | undefined {
+  return metrics?.map(m => ({ timestamp: m.timestamp, value: valueGetter(m) }))
+}
+
+const flashData = computed(() => toDataPoints(currentAnalysis.value?.flashMetrics, m => m.flashCountPerSecond))
+const redFlashData = computed(() => toDataPoints(currentAnalysis.value?.redFlashMetrics, m => m.redFlashIntensity))
+const lumData = computed(() => toDataPoints(currentAnalysis.value?.luminanceMetrics, m => m.avgLuminance))
+const motionData = computed(() => toDataPoints(currentAnalysis.value?.motionMetrics, m => m.motionIntensity))
+const sceneCutData = computed(() => toDataPoints(currentAnalysis.value?.sceneCutMetrics, m => m.cutConfidence))
+const colorCycleData = computed(() => toDataPoints(currentAnalysis.value?.colorCycleMetrics, m => m.hueShiftSpeed))
+
+const explanations = computed(() => currentAnalysis.value?.graphExplanations ?? {})
 </script>
 
 <template>
@@ -73,17 +84,24 @@ const lumData = computed(() =>
     </div>
 
     <Transition name="panel">
-      <div
-        v-if="panelOpen"
-        class="w-[62%] border-l border-black/4 overflow-y-auto bg-surface-page"
-      >
+      <div v-if="panelOpen" class="w-[62%] border-l border-black/4 overflow-y-auto bg-surface-page">
         <div class="p-5 space-y-4">
           <VideoPlayer />
           <SafetyScoreCard />
           <TimelineStrip />
           <MetricsGrid />
-          <WaveformCard title="Flash Frequency" badge-label="Primary" badge-variant="danger" :data="flashData" />
-          <WaveformCard title="Luminance" badge-label="Active" badge-variant="warning" :data="lumData" />
+          <WaveformCard title="Flash Frequency" badge-label="Flashes" badge-variant="danger"
+            :data="flashData" :explanation="explanations.flash" />
+          <WaveformCard title="Red Flash" badge-label="Red" badge-variant="danger"
+            :data="redFlashData" :explanation="explanations.red_flash" />
+          <WaveformCard title="Luminance" badge-label="Brightness" badge-variant="warning"
+            :data="lumData" :explanation="explanations.luminance" />
+          <WaveformCard title="Motion Intensity" badge-label="Motion" badge-variant="safe"
+            :data="motionData" :explanation="explanations.motion" />
+          <WaveformCard title="Scene Cuts" badge-label="Cuts" badge-variant="info"
+            :data="sceneCutData" :explanation="explanations.scene_cut" />
+          <WaveformCard title="Color Cycling" badge-label="Hue" badge-variant="info"
+            :data="colorCycleData" :explanation="explanations.color_cycle" />
         </div>
       </div>
     </Transition>

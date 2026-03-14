@@ -1,17 +1,21 @@
+"""Motion intensity measurement between consecutive video frames."""
+
+from __future__ import annotations
+
 import logging
 
+import cv2
 import numpy as np
 
 from app.models.analysis_models import MotionMetric
 
 logger = logging.getLogger(__name__)
 
+_MOTION_SCALE: float = 255.0
+
 
 class MotionAnalyzer:
-    """Measures overall motion intensity between consecutive video frames."""
-
-    def __init__(self) -> None:
-        pass
+    """Measures overall motion intensity via absolute pixel differences."""
 
     def analyze(
         self,
@@ -19,13 +23,15 @@ class MotionAnalyzer:
         frame_b: np.ndarray,
         timestamp: float,
     ) -> MotionMetric:
-        """Compute the normalised motion magnitude between two consecutive frames.
+        """Compute normalized motion intensity between two frames."""
+        gray_a = cv2.cvtColor(frame_a, cv2.COLOR_BGR2GRAY)
+        gray_b = cv2.cvtColor(frame_b, cv2.COLOR_BGR2GRAY)
 
-        Both frames must be BGR uint8 arrays of identical shape.
-        """
-        logger.debug("MotionAnalyzer.analyze at timestamp=%.3f", timestamp)
+        diff = cv2.absdiff(gray_a, gray_b)
+        intensity = float(np.mean(diff)) / _MOTION_SCALE
+
         return MotionMetric(
             timestamp=timestamp,
-            value=0.0,
-            motion_intensity=0.0,
+            value=intensity,
+            motion_intensity=intensity,
         )
