@@ -13,6 +13,9 @@ import MetricsGrid from '@/components/organisms/MetricsGrid.vue'
 import WaveformCard from '@/components/organisms/WaveformCard.vue'
 import TimelineStrip from '@/components/organisms/TimelineStrip.vue'
 import VideoPlayer from '@/components/organisms/VideoPlayer.vue'
+import ExportButtons from '@/components/organisms/ExportButtons.vue'
+import PanelHeader from '@/components/organisms/PanelHeader.vue'
+import AnalysisPill from '@/components/organisms/AnalysisPill.vue'
 import { useChat } from '@/composables/useChat'
 import { useAnalysis } from '@/composables/useAnalysis'
 import { useGraphSync } from '@/composables/useGraphSync'
@@ -26,10 +29,12 @@ const { hasKey } = useApiKey()
 const { flashData, redFlashData, lumData, motionData, sceneCutData, colorCycleData, explanations } = useGraphData(currentAnalysis)
 
 const orbCompleting = ref(false)
+const panelCollapsed = ref(false)
 
 watch(currentAnalysis, (analysis) => {
   if (analysis) {
     orbCompleting.value = true
+    panelCollapsed.value = false
     setTimeout(() => { orbCompleting.value = false }, 500)
     if (hasKey.value) {
       const score = analysis.safetyScore.toFixed(1)
@@ -39,7 +44,8 @@ watch(currentAnalysis, (analysis) => {
 })
 
 const hasMessages = computed(() => messages.value.length > 0)
-const panelOpen = computed(() => currentAnalysis.value !== null)
+const panelOpen = computed(() => currentAnalysis.value !== null && !panelCollapsed.value)
+const showPill = computed(() => currentAnalysis.value !== null && panelCollapsed.value)
 const orbState = computed(() => {
   if (orbCompleting.value) return 'complete' as const
   if (isInDangerZone.value) return 'alert' as const
@@ -58,10 +64,12 @@ const suggestions = ['What makes a video unsafe?', 'Explain WCAG guidelines', 'W
     <div
       :class="[
         'flex flex-col overflow-hidden transition-all duration-500',
-        panelOpen ? 'w-[38%]' : 'flex-1 max-w-3xl mx-auto'
+        panelOpen ? 'hidden lg:flex lg:w-[38%]' : 'flex-1 max-w-3xl mx-auto'
       ]"
       style="transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1)"
     >
+      <AnalysisPill v-if="showPill" @reopen="panelCollapsed = false" />
+
       <Transition name="welcome">
         <div
           v-if="!hasMessages && !isAnalyzing"
@@ -83,10 +91,8 @@ const suggestions = ['What makes a video unsafe?', 'Explain WCAG guidelines', 'W
 
       <div v-if="youtubeInfo" class="px-6 pt-4">
         <YoutubeFileCard
-          :title="youtubeInfo.title"
-          :channel="youtubeInfo.channel"
-          :duration="youtubeInfo.duration"
-          :thumbnail="youtubeInfo.thumbnail"
+          :title="youtubeInfo.title" :channel="youtubeInfo.channel"
+          :duration="youtubeInfo.duration" :thumbnail="youtubeInfo.thumbnail"
         />
       </div>
 
@@ -96,8 +102,16 @@ const suggestions = ['What makes a video unsafe?', 'Explain WCAG guidelines', 'W
     </div>
 
     <Transition name="panel">
-      <div v-if="panelOpen" class="w-[62%] border-l border-black/4 overflow-y-auto bg-surface-page">
-        <div class="p-5 space-y-4">
+      <div
+        v-if="panelOpen"
+        class="w-full lg:w-[62%] absolute lg:relative inset-0 lg:inset-auto border-l border-black/4 overflow-y-auto bg-surface-page z-20 lg:z-0"
+      >
+        <PanelHeader @close="panelCollapsed = true" />
+        <div class="p-5 space-y-4 card-stagger">
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-text-primary">Analysis Results</h2>
+            <ExportButtons />
+          </div>
           <VideoPlayer />
           <SafetyScoreCard />
           <TimelineStrip />
@@ -123,17 +137,8 @@ const suggestions = ['What makes a video unsafe?', 'Explain WCAG guidelines', 'W
 </template>
 
 <style scoped>
-.welcome-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-.welcome-leave-to {
-  opacity: 0;
-  transform: translateY(-12px);
-}
-.panel-enter-active {
-  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.panel-enter-from {
-  transform: translateX(100%);
-}
+.welcome-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
+.welcome-leave-to { opacity: 0; transform: translateY(-12px); }
+.panel-enter-active { transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+.panel-enter-from { transform: translateX(100%); }
 </style>
