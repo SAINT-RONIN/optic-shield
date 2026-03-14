@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-teal: #00C9A7;
+  --color-brand-blue: #5B8DEF;
+  --color-brand-purple: #7C5CFC;
+  --color-brand-violet: #C77DFF;
+  --color-danger: #F04E98;
+  --color-warning: #FFB020;
+  --color-safe: #00C9A7;
+  --color-info: #5B8DEF;
+  --color-surface-page: #F2F0F7;
+  --color-surface-card: #FFFFFF;
+  --color-surface-sidebar: #12141C;
+  --color-surface-sidebar-hover: #1E2030;
+  --color-surface-input: #F0EEF5;
+  --color-surface-code: #1E1E2E;
+  --color-text-primary: #1A1630;
+  --color-text-secondary: #6B6589;
+  --color-text-tertiary: #9D97B5;
+  --color-border-focus: #7C5CFC;
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-display: 'Instrument Serif', Georgia, serif;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 20px;
+  box-shadow: 0 4px 24px rgba(80, 60, 120, 0.06), 0 1px 3px rgba(80, 60, 120, 0.04);
+}
+
+.bg-brand-gradient {
+  background: linear-gradient(135deg, #00C9A7 0%, #5B8DEF 35%, #7C5CFC 65%, #C77DFF 100%);
+}
+
+.app-bg {
+  position: relative;
+  background-color: #F2F0F7;
+}
+.app-bg::before,
+.app-bg::after {
+  content: '';
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.app-bg::before {
+  background: radial-gradient(circle at 75% 20%, rgba(124, 92, 252, 0.08) 0%, transparent 60%);
+}
+.app-bg::after {
+  background: radial-gradient(circle at 25% 80%, rgba(0, 201, 167, 0.06) 0%, transparent 60%);
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.03); opacity: 1; }
+}
