@@ -1,19 +1,25 @@
+"""Batch frame loading for multiprocessing analysis pipeline."""
+
+from __future__ import annotations
+
 import logging
 from typing import Any
+
+import cv2
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
-class FrameWorker:
-    """Loads raw frame data from disk paths into memory for analysis."""
+def load_frame_batch(frame_paths: list[str]) -> list[tuple[int, np.ndarray | None]]:
+    """Load a batch of frames from disk.
 
-    def __init__(self) -> None:
-        pass
-
-    def load_frames(self, frame_paths: list[str]) -> list[Any]:
-        """Read frame images from the given paths and return them as a list.
-
-        Each element in the returned list corresponds to a loaded frame array.
-        """
-        logger.info("FrameWorker.load_frames called with %d paths", len(frame_paths))
-        return []
+    Returns list of (index, frame) tuples. Frame is None if load fails.
+    """
+    results: list[tuple[int, np.ndarray | None]] = []
+    for i, path in enumerate(frame_paths):
+        frame = cv2.imread(path)
+        if frame is None:
+            logger.warning("Failed to load frame: %s", path)
+        results.append((i, frame))
+    return results

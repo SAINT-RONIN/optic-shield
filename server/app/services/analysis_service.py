@@ -1,67 +1,40 @@
-"""Orchestrates the full video analysis pipeline."""
+"""Orchestrates the full video analysis pipeline with parallel processing."""
 
 from __future__ import annotations
 
 import logging
 import os
-import shutil
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Callable
 
-import cv2
-import numpy as np
-
-from app.analyzers.color_cycle_detector import ColorCycleDetector
-from app.analyzers.flash_detector import FlashDetector
 from app.analyzers.frame_extractor import FrameExtractor
-from app.analyzers.luminance_analyzer import LuminanceAnalyzer
-from app.analyzers.motion_analyzer import MotionAnalyzer
-from app.analyzers.pattern_detector import PatternDetector
-from app.analyzers.red_flash_detector import RedFlashDetector
-from app.analyzers.scene_cut_detector import SceneCutDetector
 from app.config import Settings
-from app.exceptions import AnalysisError
-from app.models.analysis_models import AnalysisProgress, AnalysisResult
+from app.exceptions import AnalysisError, VideoValidationError
+from app.models.analysis_models import (
+    AnalysisProgress, AnalysisResult,
+    ColorCycleMetric, FlashMetric, LuminanceMetric,
+    LuminanceTransitionMetric, MotionMetric, PatternMetric,
+    RedFlashMetric, SceneCutMetric,
+)
 from app.services.report_service import ReportService
+from app.utils.cleanup import cleanup_video_files
 
 logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[AnalysisProgress], None]
 
-
-class _MetricsBucket:
-    """Collects all metric lists during frame processing."""
-
-    def __init__(self) -> None:
-        from app.models.analysis_models import (
-            ColorCycleMetric, FlashMetric, LuminanceMetric,
-            LuminanceTransitionMetric, MotionMetric, PatternMetric,
-            RedFlashMetric, SceneCutMetric,
-        )
-        self.flash: list[FlashMetric] = []
-        self.red_flash: list[RedFlashMetric] = []
-        self.luminance: list[LuminanceMetric] = []
-        self.luminance_trans: list[LuminanceTransitionMetric] = []
-        self.motion: list[MotionMetric] = []
-        self.scene_cuts: list[SceneCutMetric] = []
-        self.color_cycle: list[ColorCycleMetric] = []
-        self.pattern: list[PatternMetric] = []
+_MIN_FRAMES_FOR_PARALLEL: int = 200
+_MAX_WORKERS: int = 4
 
 
 class AnalysisService:
-    """Orchestrates video analysis: extraction, detection, scoring."""
+    """Orchestrates video analysis with parallel frame processing."""
 
     _results: dict[str, AnalysisResult] = {}
 
     def __init__(self, config: Settings) -> None:
         self._config = config
         self._extractor = FrameExtractor()
-        self._flash = FlashDetector()
-        self._red_flash = RedFlashDetector()
-        self._luminance = LuminanceAnalyzer()
-        self._motion = MotionAnalyzer()
-        self._scene_cut = SceneCutDetector()
-        self._color_cycle = ColorCycleDetector()
-        self._pattern = PatternDetector()
         self._report = ReportService()
 
     async def analyze_video(
@@ -79,6 +52,7 @@ class AnalysisService:
                 ))
 
         metadata = self._extractor.probe_metadata(file_path)
+        self._validate_duration(metadata.duration)
         report("Extracting frames", 0.0)
 
         frames_dir = os.path.join(self._config.temp_dir, video_id, "frames")
@@ -90,75 +64,113 @@ class AnalysisService:
 
         total = len(frame_paths)
         report("Extracting frames", 1.0, total, total)
+        report("Analyzing frames", 0.0, 0, total)
 
-        bucket = self._run_all_detectors(frame_paths, metadata.fps, total, report)
+        metrics = self._run_parallel(frame_paths, metadata.fps, total, report)
         report("Generating report", 0.9)
 
         score = self._report.calculate_safety_score(
-            bucket.flash, bucket.red_flash, bucket.luminance_trans,
-            bucket.motion, bucket.scene_cuts, bucket.color_cycle, bucket.pattern,
+            metrics["flash"], metrics["red_flash"], metrics["luminance_trans"],
+            metrics["motion"], metrics["scene_cuts"],
+            metrics["color_cycle"], metrics["pattern"],
         )
-        danger_zones = self._report.find_danger_zones(
-            bucket.flash, bucket.red_flash, bucket.motion, bucket.pattern,
+        zones = self._report.find_danger_zones(
+            metrics["flash"], metrics["red_flash"],
+            metrics["motion"], metrics["pattern"],
         )
 
         result = AnalysisResult(
             video_id=video_id, video_metadata=metadata,
             safety_score=score, verdict=self._report.score_to_verdict(score),
-            flash_metrics=bucket.flash, red_flash_metrics=bucket.red_flash,
-            luminance_metrics=bucket.luminance, luminance_transitions=bucket.luminance_trans,
-            motion_metrics=bucket.motion, scene_cut_metrics=bucket.scene_cuts,
-            color_cycle_metrics=bucket.color_cycle, pattern_metrics=bucket.pattern,
-            danger_zones=danger_zones,
+            flash_metrics=metrics["flash"],
+            red_flash_metrics=metrics["red_flash"],
+            luminance_metrics=metrics["luminance"],
+            luminance_transitions=metrics["luminance_trans"],
+            motion_metrics=metrics["motion"],
+            scene_cut_metrics=metrics["scene_cuts"],
+            color_cycle_metrics=metrics["color_cycle"],
+            pattern_metrics=metrics["pattern"],
+            danger_zones=zones,
         )
         AnalysisService._results[video_id] = result
-        self._cleanup_frames(frames_dir)
+        cleanup_video_files(video_id, self._config.temp_dir, keep_video=True)
         report("Complete", 1.0, total, total)
         logger.info("Analysis complete video_id=%s score=%.1f", video_id, score)
         return result
 
-    def _run_all_detectors(
+    def _validate_duration(self, duration: float) -> None:
+        """Raise if video exceeds the configured max duration."""
+        max_dur = self._config.max_video_duration_seconds
+        if duration > max_dur:
+            raise VideoValidationError(
+                f"Video duration {duration:.0f}s exceeds {max_dur}s limit"
+            )
+
+    def _run_parallel(
         self, frame_paths: list[str], fps: float, total: int,
         report: Callable[..., None],
-    ) -> _MetricsBucket:
-        """Run all analyzers on every frame."""
-        bucket = _MetricsBucket()
-        extraction_fps = self._config.extraction_fps
-        prev_frame: np.ndarray | None = None
+    ) -> dict[str, list]:
+        """Split frames into chunks and process in parallel."""
+        from app.workers.analysis_worker import analyze_frame_chunk
 
-        for i, path in enumerate(frame_paths):
-            frame = cv2.imread(path)
-            if frame is None:
-                continue
-            ts = float(i) / extraction_fps
+        n_workers = min(_MAX_WORKERS, max(1, (os.cpu_count() or 2) - 1))
+        chunk_size = max(1, total // n_workers)
+        chunks: list[tuple[list[str], int]] = []
+        for i in range(0, total, chunk_size):
+            chunks.append((frame_paths[i:i + chunk_size], i))
 
-            bucket.luminance.append(self._luminance.analyze(frame, ts))
-            bucket.pattern.append(self._pattern.analyze(frame, ts))
+        if total < _MIN_FRAMES_FOR_PARALLEL or n_workers <= 1:
+            raw = analyze_frame_chunk(
+                frame_paths, 0, self._config.extraction_fps, fps,
+            )
+            report("Analyzing frames", 1.0, total, total)
+            return self._deserialize_metrics(raw)
 
-            if prev_frame is not None:
-                bucket.flash.append(self._flash.analyze(prev_frame, frame, ts, fps))
-                bucket.red_flash.append(self._red_flash.analyze(prev_frame, frame, ts))
-                bucket.luminance_trans.append(
-                    self._luminance.analyze_transition(prev_frame, frame, ts),
-                )
-                bucket.motion.append(self._motion.analyze(prev_frame, frame, ts))
-                bucket.scene_cuts.append(self._scene_cut.analyze(prev_frame, frame, ts))
-                bucket.color_cycle.append(
-                    self._color_cycle.analyze(prev_frame, frame, ts, fps),
-                )
+        all_raw: list[dict[str, list[dict]]] = []
+        with ProcessPoolExecutor(max_workers=n_workers) as pool:
+            futures = {
+                pool.submit(
+                    analyze_frame_chunk, paths, start,
+                    self._config.extraction_fps, fps,
+                ): start
+                for paths, start in chunks
+            }
+            done_count = 0
+            for future in as_completed(futures):
+                all_raw.append(future.result())
+                done_count += 1
+                report("Analyzing frames", done_count / len(chunks), 0, total)
 
-            prev_frame = frame
-            if i % 50 == 0:
-                report("Analyzing frames", float(i) / total, i, total)
+        return self._merge_and_deserialize(all_raw)
 
-        return bucket
+    def _deserialize_metrics(self, raw: dict[str, list[dict]]) -> dict[str, list]:
+        """Convert dicts back to Pydantic model instances."""
+        return {
+            "flash": [FlashMetric(**d) for d in raw["flash"]],
+            "red_flash": [RedFlashMetric(**d) for d in raw["red_flash"]],
+            "luminance": [LuminanceMetric(**d) for d in raw["luminance"]],
+            "luminance_trans": [LuminanceTransitionMetric(**d) for d in raw["luminance_trans"]],
+            "motion": [MotionMetric(**d) for d in raw["motion"]],
+            "scene_cuts": [SceneCutMetric(**d) for d in raw["scene_cuts"]],
+            "color_cycle": [ColorCycleMetric(**d) for d in raw["color_cycle"]],
+            "pattern": [PatternMetric(**d) for d in raw["pattern"]],
+        }
 
-    def _cleanup_frames(self, frames_dir: str) -> None:
-        """Remove extracted frame images."""
-        try:
-            shutil.rmtree(frames_dir, ignore_errors=True)
-        except OSError:
-            logger.warning("Failed to clean up frames dir: %s", frames_dir)
+    def _merge_and_deserialize(
+        self, chunks: list[dict[str, list[dict]]],
+    ) -> dict[str, list]:
+        """Merge multiple chunk results and deserialize."""
+        merged: dict[str, list[dict]] = {
+            "flash": [], "red_flash": [], "luminance": [],
+            "luminance_trans": [], "motion": [], "scene_cuts": [],
+            "color_cycle": [], "pattern": [],
+        }
+        for chunk in chunks:
+            for key in merged:
+                merged[key].extend(chunk[key])
+        for key in merged:
+            merged[key].sort(key=lambda d: d.get("timestamp", 0))
+        return self._deserialize_metrics(merged)
 
     async def get_analysis(self, video_id: str) -> AnalysisResult | None:
         """Retrieve a previously completed analysis result."""

@@ -66,6 +66,10 @@ async def websocket_endpoint(websocket: WebSocket, video_id: str) -> None:
 
 @app.on_event("startup")
 async def on_startup() -> None:
-    """Create the temp directory on application startup if it does not exist."""
+    """Create temp directory and clean old files on startup."""
     os.makedirs(settings.temp_dir, exist_ok=True)
     logger.info("Temp directory ensured: %s", settings.temp_dir)
+    from app.utils.cleanup import cleanup_temp_files
+    cleaned = cleanup_temp_files(settings.temp_dir, max_age_seconds=1800)
+    if cleaned:
+        logger.info("Startup cleanup removed %d old items", cleaned)
