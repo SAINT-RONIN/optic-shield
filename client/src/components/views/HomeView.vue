@@ -13,13 +13,16 @@ import TimelineStrip from '@/components/organisms/TimelineStrip.vue'
 import VideoPlayer from '@/components/organisms/VideoPlayer.vue'
 import { useChat } from '@/composables/useChat'
 import { useAnalysis } from '@/composables/useAnalysis'
+import { useGraphSync } from '@/composables/useGraphSync'
 
 const { messages, isLoading, showApiKeyModal, sendMessage } = useChat()
 const { currentAnalysis, isAnalyzing, startAnalysis } = useAnalysis()
+const { isInDangerZone } = useGraphSync()
 
 const hasMessages = computed(() => messages.value.length > 0)
 const panelOpen = computed(() => currentAnalysis.value !== null)
 const orbState = computed(() => {
+  if (isInDangerZone.value) return 'alert' as const
   if (isAnalyzing.value) return 'analyzing' as const
   if (isLoading.value) return 'thinking' as const
   return 'idle' as const

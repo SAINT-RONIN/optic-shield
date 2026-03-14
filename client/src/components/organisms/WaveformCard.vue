@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { Line } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -11,6 +11,8 @@ import {
   Tooltip,
 } from 'chart.js'
 import GraphHeader from '@/components/molecules/GraphHeader.vue'
+import GraphCursor from '@/components/organisms/GraphCursor.vue'
+import { useGraphSync } from '@/composables/useGraphSync'
 
 ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip)
 
@@ -26,6 +28,9 @@ const props = defineProps<{
   explanation?: string
   data?: DataPoint[]
 }>()
+
+const { currentTime, duration, seekTo } = useGraphSync()
+const chartAreaRef = ref<HTMLElement | null>(null)
 
 const chartData = computed(() => ({
   labels: (props.data ?? []).map(d => d.timestamp.toFixed(1)),
@@ -49,6 +54,14 @@ const chartOptions = {
     y: { display: false }
   }
 }
+
+function handleChartClick(e: MouseEvent): void {
+  const el = chartAreaRef.value
+  if (!el || !duration.value) return
+  const rect = el.getBoundingClientRect()
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+  seekTo(pct * duration.value)
+}
 </script>
 
 <template>
@@ -56,11 +69,16 @@ const chartOptions = {
     <div class="px-4 pt-3.5">
       <GraphHeader :title="title" :badge-label="badgeLabel" :badge-variant="badgeVariant" />
     </div>
-    <div class="px-4 py-2 h-20">
+    <div
+      ref="chartAreaRef"
+      class="relative px-4 py-2 h-20 cursor-pointer"
+      @click="handleChartClick"
+    >
       <Line v-if="data?.length" :data="chartData" :options="chartOptions" />
       <div v-else class="h-full flex items-center justify-center">
         <span class="text-[11px] text-text-tertiary">No data available</span>
       </div>
+      <GraphCursor :current-time="currentTime" :duration="duration" :width="0" />
     </div>
     <div
       v-if="explanation"

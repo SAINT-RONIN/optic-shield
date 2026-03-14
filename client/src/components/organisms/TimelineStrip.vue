@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useAnalysisStore } from '@/stores/analysisStore'
+import { useGraphSync } from '@/composables/useGraphSync'
 import { formatTime } from '@/utils/formatters'
 
 const store = useAnalysisStore()
+const { seekTo } = useGraphSync()
 
 interface Segment {
   flex: number
@@ -43,12 +45,19 @@ const segmentStyles: Record<string, string> = {
   warning: 'background: linear-gradient(135deg, #FFB020, #FFD060)',
   danger: 'background: linear-gradient(135deg, #F04E98, #FF6BAA)'
 }
+
+function handleBarClick(e: MouseEvent): void {
+  const target = e.currentTarget as HTMLElement
+  const rect = target.getBoundingClientRect()
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+  seekTo(pct * duration.value)
+}
 </script>
 
 <template>
   <div class="glass-card p-3.5">
     <div class="text-[11px] font-semibold text-text-tertiary mb-2 tracking-wide">TIMELINE RISK</div>
-    <div class="flex gap-0.5 h-2">
+    <div class="flex gap-0.5 h-2 cursor-pointer" @click="handleBarClick">
       <div
         v-for="(seg, i) in segments" :key="i"
         class="rounded-[4px]"
