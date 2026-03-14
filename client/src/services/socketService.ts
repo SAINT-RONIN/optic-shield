@@ -17,6 +17,7 @@ export class SocketService {
   disconnect(): void {
     this.ws?.close()
     this.ws = null
+    this.callbacks = []
   }
 
   onProgress(callback: ProgressCallback): void {

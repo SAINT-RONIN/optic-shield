@@ -8,5 +8,15 @@ export async function sendMessage(request: ChatRequest): Promise<ApiResponse<Cha
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request)
   })
+
+  if (!response.ok) {
+    return {
+      success: false,
+      data: null,
+      error: `Server error: ${response.status}`,
+      errorCode: String(response.status)
+    }
+  }
+
   return response.json() as Promise<ApiResponse<ChatResponse>>
 }

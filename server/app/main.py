@@ -52,12 +52,16 @@ async def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket) -> None:
+@app.websocket("/ws/{video_id}")
+async def websocket_endpoint(websocket: WebSocket, video_id: str) -> None:
     """WebSocket endpoint for real-time analysis progress updates."""
-    await websocket.accept()
-    await websocket.send_json({"type": "connected", "message": "Optic Shield AI ready"})
-    await websocket.close()
+    from app.services.ws_manager import ws_manager
+    await ws_manager.connect(video_id, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except Exception:
+        ws_manager.disconnect(video_id, websocket)
 
 
 @app.on_event("startup")
